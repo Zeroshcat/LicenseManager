@@ -1,6 +1,8 @@
 // Package license 提供许可证生成和验证功能
 package license
 
+import "fmt"
+
 // DualConfig 双重验证配置
 type DualConfig struct {
 	APIURL  string // API地址（必须）
@@ -22,9 +24,13 @@ type DualVerifier struct {
 //   - aesKey: AES密钥（32字节，用于解密）
 // 返回值：
 //   - *DualVerifier: 双重验证器实例
-func NewDualVerifier(config *DualConfig, publicKeyPEM []byte, aesKey []byte) *DualVerifier {
+//   - error: 创建过程中的错误
+func NewDualVerifier(config *DualConfig, publicKeyPEM []byte, aesKey []byte) (*DualVerifier, error) {
 	// 创建离线验证器
-	offlineVerifier := NewOfflineVerifier(publicKeyPEM, aesKey)
+	offlineVerifier, err := NewOfflineVerifier(publicKeyPEM, aesKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create offline verifier: %w", err)
+	}
 	
 	// 创建网络验证器
 	onlineConfig := &OnlineConfig{
@@ -37,7 +43,7 @@ func NewDualVerifier(config *DualConfig, publicKeyPEM []byte, aesKey []byte) *Du
 	return &DualVerifier{
 		offlineVerifier: offlineVerifier,
 		onlineVerifier:  onlineVerifier,
-	}
+	}, nil
 }
 
 // Verify 验证双重许可证

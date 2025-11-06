@@ -287,15 +287,25 @@
                     if (data.licenses && data.licenses.length > 0) {
                         let html = '<table><thead><tr><th>ID</th><th>设备ID</th><th>类型</th><th>到期时间</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
                         data.licenses.forEach(function(license) {
-                            const isExpired = new Date(license.expiry_date) < new Date();
+                            // 兼容不同的字段名格式（GORM可能返回大写开头的字段）
+                            const id = license.ID || license.id || '-';
+                            const deviceID = license.DeviceID || license.device_id || '-';
+                            const licenseType = license.LicenseType || license.license_type || '-';
+                            const expiryDate = license.ExpiryDate || license.expiry_date;
+                            const createdAt = license.CreatedAt || license.created_at;
+                            
+                            const isExpired = expiryDate && new Date(expiryDate) < new Date();
                             const statusClass = isExpired ? 'status-expired' : 'status-active';
                             html += '<tr>';
-                            html += '<td>' + license.id + '</td>';
-                            html += '<td>' + (license.device_id || '-') + '</td>';
-                            html += '<td>' + (license.license_type || '-') + '</td>';
-                            html += '<td><span class="status-badge ' + statusClass + '">' + new Date(license.expiry_date).toLocaleString() + '</span></td>';
-                            html += '<td>' + (license.created_at ? new Date(license.created_at).toLocaleString() : '-') + '</td>';
-                            html += '<td><button class="btn btn-danger" onclick="deleteLicense(' + license.id + ')">删除</button></td>';
+                            html += '<td>' + id + '</td>';
+                            html += '<td>' + deviceID + '</td>';
+                            html += '<td>' + licenseType + '</td>';
+                            html += '<td><span class="status-badge ' + statusClass + '">' + (expiryDate ? new Date(expiryDate).toLocaleString() : '-') + '</span></td>';
+                            html += '<td>' + (createdAt ? new Date(createdAt).toLocaleString() : '-') + '</td>';
+                            html += '<td style="display: flex; gap: 0.5rem;">';
+                            html += '<button class="btn" onclick="downloadLicense(' + id + ')">下载</button>';
+                            html += '<button class="btn btn-danger" onclick="deleteLicense(' + id + ')">删除</button>';
+                            html += '</td>';
                             html += '</tr>';
                         });
                         html += '</tbody></table>';
@@ -350,11 +360,22 @@
                 return;
             }
             fetch('/api/licenses/' + id, { method: 'DELETE' })
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) {
+                        return res.json().then(data => {
+                            throw new Error(data.message || '删除失败');
+                        });
+                    }
+                    return res.json();
+                })
                 .then(data => {
-                    alert('删除成功');
-                    loadLicenses();
-                    loadStats();
+                    if (data.success) {
+                        alert('删除成功');
+                        loadLicenses();
+                        loadStats();
+                    } else {
+                        alert('删除失败: ' + (data.message || '未知错误'));
+                    }
                 })
                 .catch(err => {
                     alert('删除失败: ' + err.message);
@@ -375,6 +396,18 @@
                 .catch(err => {
                     alert('撤销失败: ' + err.message);
                 });
+        }
+        
+        // 下载许可证文件
+        function downloadLicense(id) {
+            // 创建隐藏的下载链接
+            const link = document.createElement('a');
+            link.href = '/api/licenses/' + id + '/download';
+            link.download = 'license.key';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
         
         // 显示生成表单
@@ -411,7 +444,12 @@
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    resultDiv.innerHTML = '<div style="background: #d4edda; color: #155724; padding: 1rem; border-radius: 4px; margin-top: 1rem;"><strong>生成成功！</strong><br>许可证密钥：<br><textarea readonly style="width: 100%; margin-top: 0.5rem; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; border: 1px solid #ccc; border-radius: 4px;">' + data.license_key + '</textarea></div>';
+                    const licenseId = data.license_id || data.license_ID;
+                    let downloadBtn = '';
+                    if (licenseId) {
+                        downloadBtn = '<br><button class="btn btn-success" onclick="downloadLicense(' + licenseId + ')" style="margin-top: 0.5rem;">下载 license.key</button>';
+                    }
+                    resultDiv.innerHTML = '<div style="background: #d4edda; color: #155724; padding: 1rem; border-radius: 4px; margin-top: 1rem;"><strong>生成成功！</strong><br>许可证密钥：<br><textarea readonly style="width: 100%; margin-top: 0.5rem; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; border: 1px solid #ccc; border-radius: 4px;">' + data.license_key + '</textarea>' + downloadBtn + '</div>';
                     resultDiv.style.display = 'block';
                     loadLicenses();
                     loadStats();

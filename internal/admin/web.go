@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Zeroshcat/LicenseManager/internal/crypto"
@@ -103,13 +104,33 @@ func (w *WebAdmin) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	case "/api/tokens":
 		w.handleTokensAPI(rw, r)
 	default:
-		// 处理删除和撤销操作
-		if r.Method == http.MethodDelete && len(r.URL.Path) > 13 && r.URL.Path[:13] == "/api/licenses/" {
-			w.handleDeleteLicense(rw, r)
-		} else if r.Method == http.MethodPost && len(r.URL.Path) > 20 && r.URL.Path[len(r.URL.Path)-7:] == "/revoke" {
+		path := r.URL.Path
+		// 处理下载许可证文件: GET /api/licenses/{id}/download
+		if r.Method == http.MethodGet && strings.HasPrefix(path, "/api/licenses/") && strings.HasSuffix(path, "/download") {
+			w.handleDownloadLicense(rw, r)
+		} else if r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/licenses/") {
+			// 删除许可证: DELETE /api/licenses/{id}
+			// 确保不是下载路径
+			if !strings.HasSuffix(path, "/download") {
+				w.handleDeleteLicense(rw, r)
+			} else {
+				rw.Header().Set("Content-Type", "application/json")
+				rw.WriteHeader(http.StatusMethodNotAllowed)
+				json.NewEncoder(rw).Encode(map[string]interface{}{
+					"success": false,
+					"message": "Method not allowed",
+				})
+			}
+		} else if r.Method == http.MethodPost && strings.HasSuffix(path, "/revoke") {
+			// 撤销Token: POST /api/tokens/{token}/revoke
 			w.handleRevokeToken(rw, r)
 		} else {
-			http.NotFound(rw, r)
+			rw.Header().Set("Content-Type", "application/json")
+			rw.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(rw).Encode(map[string]interface{}{
+				"success": false,
+				"message": "Not found",
+			})
 		}
 	}
 }
@@ -294,23 +315,59 @@ func (w *WebAdmin) handleLicensesAPI(rw http.ResponseWriter, r *http.Request) {
 
 // handleDeleteLicense 处理删除许可证
 func (w *WebAdmin) handleDeleteLicense(rw http.ResponseWriter, r *http.Request) {
-	// 从URL提取ID
-	idStr := r.URL.Path[len("/api/licenses/"):]
+	// 从URL提取ID: /api/licenses/{id}
+	path := r.URL.Path
+	prefix := "/api/licenses/"
+	if !strings.HasPrefix(path, prefix) {
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(rw).Encode(map[string]interface{}{
+			"success": false,
+			"message": "Invalid path",
+		})
+		return
+	}
+
+	idStr := strings.TrimPrefix(path, prefix)
+	// 移除可能的尾部斜杠
+	idStr = strings.TrimSuffix(idStr, "/")
+
+	if idStr == "" {
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(rw).Encode(map[string]interface{}{
+			"success": false,
+			"message": "License ID is required",
+		})
+		return
+	}
+
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(rw, "Invalid license ID", http.StatusBadRequest)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(rw).Encode(map[string]interface{}{
+			"success": false,
+			"message": "Invalid license ID: " + err.Error(),
+		})
 		return
 	}
 
 	if err := w.db.DeleteLicense(id); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(rw).Encode(map[string]interface{}{
+			"success": false,
+			"message": "Failed to delete license: " + err.Error(),
+		})
 		return
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(http.StatusOK)
 	json.NewEncoder(rw).Encode(map[string]interface{}{
 		"success": true,
-		"message": "License deleted",
+		"message": "License deleted successfully",
 	})
 }
 
@@ -450,12 +507,57 @@ func (w *WebAdmin) handleGenerateLicense(rw http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// 返回JSON，包含许可证ID用于下载
 	rw.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(rw).Encode(map[string]interface{}{
 		"success":     true,
 		"license_key": licenseKey,
+		"license_id":  licenseRecord.ID,
 		"message":     "License generated successfully",
 	})
+}
+
+// handleDownloadLicense 处理下载许可证文件
+func (w *WebAdmin) handleDownloadLicense(rw http.ResponseWriter, r *http.Request) {
+	// 从URL提取ID: /api/licenses/{id}/download
+	path := r.URL.Path
+	prefix := "/api/licenses/"
+	suffix := "/download"
+
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		http.Error(rw, "Invalid download path", http.StatusBadRequest)
+		return
+	}
+
+	// 提取ID部分
+	idStr := strings.TrimPrefix(path, prefix)
+	idStr = strings.TrimSuffix(idStr, suffix)
+
+	if idStr == "" {
+		http.Error(rw, "License ID is required", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(rw, "Invalid license ID: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// 获取许可证记录
+	license, err := w.db.GetLicenseByID(id)
+	if err != nil {
+		http.Error(rw, "License not found: "+err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// 设置下载响应头，文件名为 license.key
+	rw.Header().Set("Content-Type", "application/octet-stream")
+	rw.Header().Set("Content-Disposition", "attachment; filename=license.key")
+	rw.Header().Set("Content-Length", fmt.Sprintf("%d", len(license.LicenseKey)))
+
+	// 写入许可证密钥内容（license_key 字段）
+	rw.Write([]byte(license.LicenseKey))
 }
 
 // loadKeys 加载密钥文件

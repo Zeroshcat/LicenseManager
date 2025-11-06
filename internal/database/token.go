@@ -10,14 +10,14 @@ import (
 
 // TokenRecord Token记录
 type TokenRecord struct {
-	ID        int64          `gorm:"primaryKey;autoIncrement"` // 主键ID
-	Token     string         `gorm:"uniqueIndex;not null"`     // Token值
-	TokenType string         `gorm:"not null"`                 // Token类型（client|admin）
-	AppID     string         // 应用ID（client类型需要）
-	CreatedAt time.Time      `gorm:"not null"` // 创建时间
-	ExpiresAt *time.Time     // 过期时间（可选，使用指针支持NULL）
-	Revoked   bool           `gorm:"default:false"` // 是否已撤销
-	DeletedAt gorm.DeletedAt `gorm:"index"`         // 软删除
+	ID        int64          `gorm:"primaryKey;autoIncrement" json:"id"`        // 主键ID
+	Token     string         `gorm:"uniqueIndex;not null" json:"token"`         // Token值
+	TokenType string         `gorm:"not null" json:"token_type"`                // Token类型（client|admin）
+	AppID     string         `json:"app_id"`                                    // 应用ID（client类型需要）
+	CreatedAt time.Time      `gorm:"not null" json:"created_at"`                // 创建时间
+	ExpiresAt *time.Time     `json:"expires_at"`                                // 过期时间（可选，使用指针支持NULL）
+	Revoked   bool           `gorm:"default:false" json:"revoked"`               // 是否已撤销
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`                            // 软删除（不序列化）
 }
 
 // TableName 指定表名

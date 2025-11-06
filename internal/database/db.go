@@ -92,6 +92,9 @@ func NewDB(dbPath string) (*DB, error) {
 	// 使用sqlite.Dialector的Conn字段传入已创建的连接
 	db, err := gorm.Open(sqlite.Dialector{Conn: sqlDB}, &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent), // 静默模式，减少日志输出
+		NowFunc: func() time.Time {
+			return time.Now() // 确保时间函数正常工作
+		},
 	})
 	if err != nil {
 		sqlDB.Close()
@@ -153,12 +156,43 @@ func (db *DB) autoMigrate() error {
 //   - int64: 插入的记录ID
 //   - error: 保存过程中的错误
 func (db *DB) SaveLicense(record *LicenseRecord) (int64, error) {
+	// 确保时间字段被设置
 	now := time.Now()
-	record.CreatedAt = now
-	record.UpdatedAt = now
+	if record.CreatedAt.IsZero() {
+		record.CreatedAt = now
+	}
+	if record.UpdatedAt.IsZero() {
+		record.UpdatedAt = now
+	}
 
-	if err := db.db.Create(record).Error; err != nil {
-		return 0, err
+	// 验证必填字段
+	if record.DeviceID == "" {
+		return 0, fmt.Errorf("device_id is required")
+	}
+	if record.LicenseKey == "" {
+		return 0, fmt.Errorf("license_key is required")
+	}
+	if record.LicenseType == "" {
+		return 0, fmt.Errorf("license_type is required")
+	}
+	if record.ExpiryDate.IsZero() {
+		return 0, fmt.Errorf("expiry_date is required")
+	}
+
+	// 使用 Create 保存记录，GORM 会自动处理 ID、CreatedAt、UpdatedAt
+	result := db.db.Create(record)
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to save license: %w", result.Error)
+	}
+
+	// 检查是否成功插入（affected rows > 0）
+	if result.RowsAffected == 0 {
+		return 0, fmt.Errorf("license was not saved (no rows affected)")
+	}
+
+	// 验证记录是否被正确保存（通过 ID 判断）
+	if record.ID == 0 {
+		return 0, fmt.Errorf("license was not saved (ID is 0)")
 	}
 
 	return record.ID, nil

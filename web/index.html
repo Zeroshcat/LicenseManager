@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LicenseManager - 管理后台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header h1 { font-size: 1.5rem; }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-card h3 {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .section {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        .section h2 {
+            margin-bottom: 1rem;
+            color: #2c3e50;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .btn:hover { background: #2980b9; }
+        .btn-success { background: #27ae60; }
+        .btn-success:hover { background: #229954; }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #eee;
+        }
+        .tab {
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: #7f8c8d;
+            font-size: 1rem;
+        }
+        .tab.active {
+            color: #3498db;
+            border-bottom: 2px solid #3498db;
+            margin-bottom: -2px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .status-active { background: #d4edda; color: #155724; }
+        .status-expired { background: #f8d7da; color: #721c24; }
+        .status-revoked { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>LicenseManager 管理后台</h1>
+    </div>
+    <div class="container">
+        <div class="stats">
+            <div class="stat-card">
+                <h3>总设备数</h3>
+                <div class="value" id="total-devices">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>活跃设备</h3>
+                <div class="value" id="active-devices">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>总许可证</h3>
+                <div class="value" id="total-licenses">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>已过期</h3>
+                <div class="value" id="expired-licenses">-</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('devices')">设备管理</button>
+                <button class="tab" onclick="switchTab('licenses')">许可证管理</button>
+                <button class="tab" onclick="switchTab('tokens')">Token管理</button>
+            </div>
+            
+            <div id="devices-tab" class="tab-content active">
+                <h2>设备列表</h2>
+                <div id="devices-container">
+                    <p>加载中...</p>
+                </div>
+            </div>
+            
+            <div id="licenses-tab" class="tab-content">
+                <h2>许可证管理</h2>
+                <div style="margin-bottom: 1.5rem;">
+                    <button class="btn btn-success" onclick="showGenerateForm()">生成新许可证</button>
+                </div>
+                <div id="generate-form" style="display: none; background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem;">生成许可证</h3>
+                    <form id="generateLicenseForm">
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">设备ID</label>
+                            <input type="text" id="gen-device-id" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">许可证类型</label>
+                            <select id="gen-license-type" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="offline">离线</option>
+                                <option value="online">在线</option>
+                                <option value="dual">双重验证</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">到期日期</label>
+                            <input type="date" id="gen-expiry-date" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button type="submit" class="btn btn-success">生成</button>
+                            <button type="button" class="btn" onclick="hideGenerateForm()">取消</button>
+                        </div>
+                    </form>
+                    <div id="generate-result" style="margin-top: 1rem; display: none;"></div>
+                </div>
+                <div id="licenses-container">
+                    <p>加载中...</p>
+                </div>
+            </div>
+            
+            <div id="tokens-tab" class="tab-content">
+                <h2>Token列表</h2>
+                <div id="tokens-container">
+                    <p>加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 切换标签页
+        function switchTab(tabName) {
+            // 隐藏所有标签内容
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            // 移除所有标签的active状态
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            // 显示选中的标签内容
+            document.getElementById(tabName + '-tab').classList.add('active');
+            // 激活选中的标签
+            event.target.classList.add('active');
+            
+            // 加载对应数据
+            if (tabName === 'devices') {
+                loadDevices();
+            } else if (tabName === 'licenses') {
+                loadLicenses();
+            } else if (tabName === 'tokens') {
+                loadTokens();
+            }
+        }
+        
+        // 加载统计数据
+        function loadStats() {
+            fetch('/api/stats')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('total-devices').textContent = data.total_devices || 0;
+                    document.getElementById('active-devices').textContent = data.active_devices || 0;
+                    document.getElementById('total-licenses').textContent = data.total_licenses || 0;
+                    document.getElementById('expired-licenses').textContent = data.expired_licenses || 0;
+                })
+                .catch(err => {
+                    console.error('Failed to load stats:', err);
+                });
+        }
+        
+        // 加载设备列表
+        function loadDevices() {
+            fetch('/api/devices?page=1&limit=50')
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('devices-container');
+                    if (data.devices && data.devices.length > 0) {
+                        let html = '<table><thead><tr><th>设备ID</th><th>设备名称</th><th>应用ID</th><th>状态</th><th>注册时间</th><th>最后访问</th></tr></thead><tbody>';
+                        data.devices.forEach(function(device) {
+                            const statusClass = device.status === 'active' ? 'status-active' : 
+                                               device.status === 'expired' ? 'status-expired' : 'status-revoked';
+                            html += '<tr>';
+                            html += '<td>' + (device.device_id || '-') + '</td>';
+                            html += '<td>' + (device.device_name || '-') + '</td>';
+                            html += '<td>' + (device.app_id || '-') + '</td>';
+                            html += '<td><span class="status-badge ' + statusClass + '">' + (device.status || 'unknown') + '</span></td>';
+                            html += '<td>' + (device.registered_at ? new Date(device.registered_at).toLocaleString() : '-') + '</td>';
+                            html += '<td>' + (device.last_seen ? new Date(device.last_seen).toLocaleString() : '-') + '</td>';
+                            html += '</tr>';
+                        });
+                        html += '</tbody></table>';
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = '<p>暂无设备</p>';
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('devices-container').innerHTML = '<p>加载失败: ' + err.message + '</p>';
+                });
+        }
+        
+        // 加载许可证列表
+        function loadLicenses() {
+            fetch('/api/licenses?page=1&limit=50')
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('licenses-container');
+                    if (data.licenses && data.licenses.length > 0) {
+                        let html = '<table><thead><tr><th>ID</th><th>设备ID</th><th>类型</th><th>到期时间</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+                        data.licenses.forEach(function(license) {
+                            const isExpired = new Date(license.expiry_date) < new Date();
+                            const statusClass = isExpired ? 'status-expired' : 'status-active';
+                            html += '<tr>';
+                            html += '<td>' + license.id + '</td>';
+                            html += '<td>' + (license.device_id || '-') + '</td>';
+                            html += '<td>' + (license.license_type || '-') + '</td>';
+                            html += '<td><span class="status-badge ' + statusClass + '">' + new Date(license.expiry_date).toLocaleString() + '</span></td>';
+                            html += '<td>' + (license.created_at ? new Date(license.created_at).toLocaleString() : '-') + '</td>';
+                            html += '<td><button class="btn btn-danger" onclick="deleteLicense(' + license.id + ')">删除</button></td>';
+                            html += '</tr>';
+                        });
+                        html += '</tbody></table>';
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = '<p>暂无许可证</p>';
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('licenses-container').innerHTML = '<p>加载失败: ' + err.message + '</p>';
+                });
+        }
+        
+        // 加载Token列表
+        function loadTokens() {
+            fetch('/api/tokens?page=1&limit=50')
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('tokens-container');
+                    if (data.tokens && data.tokens.length > 0) {
+                        let html = '<table><thead><tr><th>ID</th><th>Token</th><th>类型</th><th>应用ID</th><th>创建时间</th><th>过期时间</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+                        data.tokens.forEach(function(token) {
+                            const isExpired = token.expires_at && new Date(token.expires_at) < new Date();
+                            const isRevoked = token.revoked;
+                            const statusClass = isRevoked ? 'status-revoked' : (isExpired ? 'status-expired' : 'status-active');
+                            const statusText = isRevoked ? '已撤销' : (isExpired ? '已过期' : '有效');
+                            html += '<tr>';
+                            html += '<td>' + token.id + '</td>';
+                            html += '<td style="font-family: monospace; font-size: 0.85rem;">' + (token.token ? token.token.substring(0, 20) + '...' : '-') + '</td>';
+                            html += '<td>' + (token.token_type || '-') + '</td>';
+                            html += '<td>' + (token.app_id || '-') + '</td>';
+                            html += '<td>' + (token.created_at ? new Date(token.created_at).toLocaleString() : '-') + '</td>';
+                            html += '<td>' + (token.expires_at ? new Date(token.expires_at).toLocaleString() : '永不过期') + '</td>';
+                            html += '<td><span class="status-badge ' + statusClass + '">' + statusText + '</span></td>';
+                            html += '<td><button class="btn btn-danger" onclick="revokeToken(\'' + token.token + '\')">撤销</button></td>';
+                            html += '</tr>';
+                        });
+                        html += '</tbody></table>';
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = '<p>暂无Token</p>';
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('tokens-container').innerHTML = '<p>加载失败: ' + err.message + '</p>';
+                });
+        }
+        
+        // 删除许可证
+        function deleteLicense(id) {
+            if (!confirm('确定要删除这个许可证吗？')) {
+                return;
+            }
+            fetch('/api/licenses/' + id, { method: 'DELETE' })
+                .then(res => res.json())
+                .then(data => {
+                    alert('删除成功');
+                    loadLicenses();
+                    loadStats();
+                })
+                .catch(err => {
+                    alert('删除失败: ' + err.message);
+                });
+        }
+        
+        // 撤销Token
+        function revokeToken(token) {
+            if (!confirm('确定要撤销这个Token吗？')) {
+                return;
+            }
+            fetch('/api/tokens/' + encodeURIComponent(token) + '/revoke', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    alert('撤销成功');
+                    loadTokens();
+                })
+                .catch(err => {
+                    alert('撤销失败: ' + err.message);
+                });
+        }
+        
+        // 显示生成表单
+        function showGenerateForm() {
+            document.getElementById('generate-form').style.display = 'block';
+            document.getElementById('generate-result').style.display = 'none';
+            document.getElementById('generateLicenseForm').reset();
+        }
+        
+        // 隐藏生成表单
+        function hideGenerateForm() {
+            document.getElementById('generate-form').style.display = 'none';
+        }
+        
+        // 生成许可证表单提交
+        document.getElementById('generateLicenseForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const deviceID = document.getElementById('gen-device-id').value;
+            const licenseType = document.getElementById('gen-license-type').value;
+            const expiryDate = document.getElementById('gen-expiry-date').value;
+            const resultDiv = document.getElementById('generate-result');
+            
+            fetch('/api/licenses/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    device_id: deviceID,
+                    license_type: licenseType,
+                    expiry_date: expiryDate
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    resultDiv.innerHTML = '<div style="background: #d4edda; color: #155724; padding: 1rem; border-radius: 4px; margin-top: 1rem;"><strong>生成成功！</strong><br>许可证密钥：<br><textarea readonly style="width: 100%; margin-top: 0.5rem; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; border: 1px solid #ccc; border-radius: 4px;">' + data.license_key + '</textarea></div>';
+                    resultDiv.style.display = 'block';
+                    loadLicenses();
+                    loadStats();
+                } else {
+                    resultDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 1rem; border-radius: 4px;">生成失败: ' + (data.message || '未知错误') + '</div>';
+                    resultDiv.style.display = 'block';
+                }
+            })
+            .catch(err => {
+                resultDiv.innerHTML = '<div style="background: #f8d7da; color: #721c24; padding: 1rem; border-radius: 4px;">生成失败: ' + err.message + '</div>';
+                resultDiv.style.display = 'block';
+            });
+        });
+        
+        // 页面加载时初始化
+        window.onload = function() {
+            loadStats();
+            loadDevices();
+        };
+    </script>
+</body>
+</html>
+

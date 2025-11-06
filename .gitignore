@@ -1,0 +1,69 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+licensemanager
+license-server
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+license.db
+license.db-shm
+license.db-wal
+license.db-journal
+
+# Key files (重要：不要提交密钥文件)
+*.key
+*.pem
+*.priv
+*.pub
+private_key.pem
+public_key.pem
+aes_key.bin
+
+# License files
+license.key
+*.license
+
+# Configuration files with sensitive data
+config/local.yaml
+config/production.yaml
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+

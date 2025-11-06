@@ -1,0 +1,9 @@
+# 密钥文件（不要提交到版本控制）
+public_key.pem
+aes_key.bin
+license.key
+
+# 编译产物
+app
+app.exe
+

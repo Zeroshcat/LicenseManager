@@ -78,6 +78,8 @@ LicenseManager/
 ├── pkg/
 │   └── output/              # 输出格式化
 ├── web/                     # Web 管理界面（可选）
+├── examples/                # 示例代码
+│   └── embedded_keys/      # 嵌入密钥示例
 └── config/                  # 配置文件示例
 ```
 
@@ -688,10 +690,110 @@ func parseLicense(key string) (*License, error) {
 ## 安全说明
 
 ### 密钥安全
+
+#### 密钥文件说明
+
+**离线验证需要的文件：**
+- `public_key.pem`（公钥）：**可以公开分发** ✅
+  - 用于验证许可证签名
+  - 即使泄露也无法伪造许可证
+  - 可以嵌入到客户端程序中
+  
+- `aes_key.bin`（AES密钥）：**需要保护** ⚠️
+  - 用于解密许可证内容
+  - 如果泄露，攻击者可以查看许可证内容，但无法伪造新许可证
+  - 建议使用代码混淆或嵌入到程序中
+  - **重要**：即使 AES 密钥泄露，攻击者也无法破解其他用户的许可证（因为需要对应的私钥才能生成有效签名）
+  - **注意**：如果用户替换了密钥文件（运行 `init`），原许可证将无法验证，但这不是破解，用户只能生成自己的许可证
+
+- `private_key.pem`（私钥）：**绝对不能泄露** 🚨
+  - 只存在于服务器端
+  - 用于生成和签名许可证
+  - 如果泄露，攻击者可以伪造任意许可证
+
+#### 安全建议
 - 所有密钥文件应妥善保管，不要提交到版本控制系统
 - 生产环境建议使用环境变量或密钥管理服务
 - 定期轮换主密钥
 - 网络授权建议使用 HTTPS
+- 对于高安全要求，考虑使用在线验证模式
+
+#### 嵌入密钥到代码中（推荐用于客户端）
+
+对于客户端程序，可以将公钥和 AES 密钥嵌入到代码中，并使用代码混淆工具保护：
+
+**方法1：使用 Go embed 指令（推荐）**
+
+```go
+package main
+
+import (
+    "embed"
+    "github.com/Zeroshcat/LicenseManager/pkg/license"
+)
+
+//go:embed public_key.pem aes_key.bin
+var embeddedKeys embed.FS
+
+func main() {
+    // 从嵌入的文件系统读取密钥
+    publicKeyPEM, _ := embeddedKeys.ReadFile("public_key.pem")
+    aesKey, _ := embeddedKeys.ReadFile("aes_key.bin")
+    
+    // 创建验证器
+    verifier, _ := license.NewOfflineVerifier(publicKeyPEM, aesKey)
+    // ... 使用验证器
+}
+```
+
+**编译时使用 garble 混淆（强烈推荐）：**
+
+```bash
+# 安装 garble
+go install mvdan.cc/garble@latest
+
+# 使用 garble 混淆编译
+garble build -o app main.go
+```
+
+**garble 的作用：**
+- 混淆变量名和函数名
+- 混淆字符串常量（包括嵌入的密钥）
+- 增加逆向工程难度
+- 减小二进制文件大小
+
+**完整示例：**
+
+1. **准备密钥文件**（编译前必须完成）：
+   ```bash
+   # Linux/macOS
+   cp public_key.pem examples/embedded_keys/
+   cp aes_key.bin examples/embedded_keys/
+   
+   # Windows
+   copy public_key.pem examples\embedded_keys\
+   copy aes_key.bin examples\embedded_keys\
+   ```
+
+2. **编译程序**：
+   ```bash
+   cd examples/embedded_keys
+   go build -o app main.go
+   ```
+
+3. **使用 garble 混淆编译**（推荐）：
+   ```bash
+   # 安装 garble
+   go install mvdan.cc/garble@latest
+   
+   # 混淆编译
+   garble build -o app main.go
+   ```
+
+详细示例代码和更多方法请参考 [examples/embedded_keys/](examples/embedded_keys/)
+
+#### 详细安全分析
+更多安全分析请参考 [docs/SECURITY.md](docs/SECURITY.md)
 
 ### 后台管理安全
 - **密码保护**：启动管理服务器时必须设置强密码（`--passwd` 参数）
@@ -762,6 +864,19 @@ go run test_license.go
 3. 保存到文件
 4. 从文件读取并验证
 5. 验证所有步骤是否成功
+
+### Q: 如果用户替换了密钥文件会怎样？
+
+A: 如果用户运行 `init` 生成新的密钥对，会覆盖原来的密钥文件。这会导致：
+- ✅ 用户可以用新密钥生成自己的许可证
+- ❌ 用户无法验证之前用旧密钥生成的许可证（签名不匹配）
+- ❌ 用户无法破解其他用户的许可证（需要对应的私钥）
+- ⚠️ 这是离线验证的固有特性，不是安全漏洞
+
+**建议：**
+- 对于高安全要求，使用在线验证模式
+- 密钥文件应该妥善保管，不要随意替换
+- 如果需要替换密钥，需要重新生成所有许可证
 
 ## 许可证
 

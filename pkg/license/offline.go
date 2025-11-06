@@ -46,6 +46,18 @@ func NewOfflineVerifier(publicKeyPEM []byte, aesKey []byte) (*OfflineVerifier, e
 	}, nil
 }
 
+// DecodeLicense 解码许可证（不验证设备ID）
+// 用于调试和诊断，可以查看许可证中的设备ID等信息
+// 参数：
+//   - licenseKey: 许可证密钥（base64编码）
+//
+// 返回值：
+//   - *License: 许可证对象
+//   - error: 解码过程中的错误
+func (v *OfflineVerifier) DecodeLicense(licenseKey string) (*License, error) {
+	return v.decodeLicense(licenseKey)
+}
+
 // Verify 验证离线许可证
 // 参数：
 //   - licenseKey: 许可证密钥（base64编码）
@@ -60,7 +72,7 @@ func (v *OfflineVerifier) Verify(licenseKey string, deviceID string) (*VerifyRes
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode license: %w", err)
 	}
-
+	
 	// 防御性检查：license 不应该为 nil
 	if license == nil {
 		return nil, fmt.Errorf("decoded license is nil")

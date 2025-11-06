@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Zeroshcat/LicenseManager/internal/crypto"
@@ -152,5 +153,12 @@ func LoadLicenseFromFile(filepath string) (string, error) {
 	if err != nil {
 		return "", ErrLicenseNotFound
 	}
-	return string(data), nil
+
+	// 清理许可证密钥：去除换行符、空格等
+	licenseKey := strings.TrimSpace(string(data))
+	licenseKey = strings.ReplaceAll(licenseKey, "\n", "")
+	licenseKey = strings.ReplaceAll(licenseKey, "\r", "")
+	licenseKey = strings.ReplaceAll(licenseKey, " ", "")
+
+	return licenseKey, nil
 }

@@ -151,19 +151,26 @@ go build -o license-server ./cmd/server
 4. 点击"生成新许可证"按钮
 5. 填写设备ID、选择许可证类型、设置到期日期
 6. 点击"生成"即可创建许可证，生成的许可证密钥会自动显示并可复制
+7. 生成成功后可以点击"下载 license.key"按钮直接下载许可证文件
+8. 在许可证列表中，每个许可证都有"下载"按钮，可以随时下载
 
 ### 3. 验证许可证
 
 ```bash
-# 验证离线许可证
+# 验证离线许可证（自动获取设备ID）
 ./licensemanager verify --license-file license.key
 
+# 验证离线许可证（指定设备ID）
+./licensemanager verify --license-file license.key --device-id <device-id>
+
 # 验证网络许可证
-./licensemanager verify --online --device-id <device-id>
+./licensemanager verify --online --device-id <device-id> --api-url http://localhost:8080
 
 # 验证双重验证许可证
-./licensemanager verify --dual --license-file license.key --device-id <device-id>
+./licensemanager verify --dual --license-file license.key --device-id <device-id> --api-url http://localhost:8080
 ```
+
+**注意**：验证时会自动清理许可证文件中的换行符和空格，确保 Base64 编码正确解析。
 
 ### 4. 设备管理
 
@@ -198,8 +205,10 @@ go build -o license-server ./cmd/server
 - **统计概览**：查看总设备数、活跃设备、许可证数量等统计信息
 - **设备管理**：查看所有注册设备，包括设备ID、名称、状态、注册时间等
 - **许可证管理**：
-  - 查看所有许可证列表
+  - 查看所有许可证列表（ID、设备ID、类型、到期时间、创建时间）
   - 在线生成新许可证（支持离线/在线/双重验证三种类型）
+  - 生成后可直接下载 `license.key` 文件
+  - 许可证列表中每个许可证都支持快捷下载
   - 删除许可证
 - **Token 管理**：查看和管理 API Token，支持撤销操作
 

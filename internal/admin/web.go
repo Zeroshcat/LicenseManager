@@ -12,10 +12,10 @@ import (
 	"strconv"
 	"time"
 
-	"licensemanager/internal/crypto"
-	"licensemanager/internal/database"
-	licensegen "licensemanager/internal/license"
-	"licensemanager/pkg/license"
+	"github.com/Zeroshcat/LicenseManager/internal/crypto"
+	"github.com/Zeroshcat/LicenseManager/internal/database"
+	licensegen "github.com/Zeroshcat/LicenseManager/internal/license"
+	"github.com/Zeroshcat/LicenseManager/pkg/license"
 )
 
 // WebAdmin Web管理界面

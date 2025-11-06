@@ -1,4 +1,4 @@
-module licensemanager
+module github.com/Zeroshcat/LicenseManager
 
 go 1.21
 

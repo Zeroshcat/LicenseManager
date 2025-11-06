@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"time"
 	
-	"licensemanager/internal/crypto"
-	"licensemanager/pkg/license"
+	"github.com/Zeroshcat/LicenseManager/internal/crypto"
+	"github.com/Zeroshcat/LicenseManager/pkg/license"
 )
 
 // Generator 许可证生成器

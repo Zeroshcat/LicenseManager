@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 	
-	"licensemanager/internal/database"
-	"licensemanager/pkg/license"
+	"github.com/Zeroshcat/LicenseManager/internal/database"
+	"github.com/Zeroshcat/LicenseManager/pkg/license"
 )
 
 // Server 授权服务器

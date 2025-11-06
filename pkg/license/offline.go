@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 	
-	"licensemanager/internal/crypto"
+	"github.com/Zeroshcat/LicenseManager/internal/crypto"
 )
 
 // OfflineVerifier 离线验证器

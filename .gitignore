@@ -4,8 +4,11 @@
 *.dll
 *.so
 *.dylib
-licensemanager
-license-server
+# 只忽略根目录下的二进制文件，不忽略cmd目录下的源代码
+/licensemanager
+/license-server
+# 允许cmd目录下的源代码
+!cmd/
 
 # Test binary
 *.test

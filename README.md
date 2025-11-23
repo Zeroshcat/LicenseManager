@@ -22,7 +22,9 @@
   - 双重验证：同时需要离线密钥和网络验证才能授权
   
 - ✅ **设备绑定**
-  - 基于硬件指纹的设备唯一标识
+  - 基于系统UUID的设备唯一标识
+  - 优先使用系统提供的机器UUID（Linux/macOS/Windows）
+  - 标准UUID格式：`XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX`
   - 支持多设备管理
   - 设备授权状态追踪
 
@@ -76,6 +78,8 @@ LicenseManager/
 │   ├── server/              # 网络授权服务器
 │   └── admin/               # 后台管理
 ├── pkg/
+│   ├── device/              # 设备UUID获取（参考 xinjiayu/LicenseManager）
+│   ├── license/             # 许可证验证器
 │   └── output/              # 输出格式化
 ├── web/                     # Web 管理界面（可选）
 ├── examples/                # 示例代码
@@ -131,18 +135,29 @@ go build -o license-server ./cmd/server
 
 #### 命令行生成
 
+**步骤1：获取设备UUID**
 ```bash
-# 生成离线许可证
-./licensemanager generate --type offline --device-id <device-id> --expiry 2024-12-31
+# 获取目标设备的UUID
+./licensemanager uuid
+# 输出: F6235A40-C9E2-5681-B236-ED9C4C15E58D
+```
+
+**步骤2：生成许可证**
+```bash
+# 生成离线许可证（使用设备UUID）
+./licensemanager generate --type offline --device-id F6235A40-C9E2-5681-B236-ED9C4C15E58D --expiry 2024-12-31
 
 # 生成网络许可证
-./licensemanager generate --type online --device-id <device-id> --expiry 2024-12-31
+./licensemanager generate --type online --device-id F6235A40-C9E2-5681-B236-ED9C4C15E58D --expiry 2024-12-31
 
 # 生成双重验证许可证
-./licensemanager generate --type dual --device-id <device-id> --expiry 2024-12-31
+./licensemanager generate --type dual --device-id F6235A40-C9E2-5681-B236-ED9C4C15E58D --expiry 2024-12-31
 
 # 保存到文件
-./licensemanager generate --type offline --device-id <device-id> --expiry 2024-12-31 --output license.key
+./licensemanager generate --type offline --device-id F6235A40-C9E2-5681-B236-ED9C4C15E58D --expiry 2024-12-31 --output license.key
+
+# 如果不指定 --device-id，将自动获取当前设备的UUID
+./licensemanager generate --type offline --expiry 2024-12-31 --output license.key
 ```
 
 #### Web 界面生成
@@ -151,7 +166,7 @@ go build -o license-server ./cmd/server
 2. 访问 Web 界面：`http://localhost:8080`
 3. 登录后进入"许可证管理"标签页
 4. 点击"生成新许可证"按钮
-5. 填写设备ID、选择许可证类型、设置到期日期
+5. 填写设备UUID（可通过 `./licensemanager uuid` 获取）、选择许可证类型、设置到期日期
 6. 点击"生成"即可创建许可证，生成的许可证密钥会自动显示并可复制
 7. 生成成功后可以点击"下载 license.key"按钮直接下载许可证文件
 8. 在许可证列表中，每个许可证都有"下载"按钮，可以随时下载
@@ -162,29 +177,49 @@ go build -o license-server ./cmd/server
 # 验证离线许可证（自动获取设备ID）
 ./licensemanager verify --license-file license.key
 
-# 验证离线许可证（指定设备ID）
-./licensemanager verify --license-file license.key --device-id <device-id>
+# 验证离线许可证（指定设备UUID）
+./licensemanager verify --license-file license.key --device-id F6235A40-C9E2-5681-B236-ED9C4C15E58D
 
 # 验证网络许可证
-./licensemanager verify --online --device-id <device-id> --api-url http://localhost:8080
+./licensemanager verify --online --device-id F6235A40-C9E2-5681-B236-ED9C4C15E58D --api-url http://localhost:8080
 
 # 验证双重验证许可证
-./licensemanager verify --dual --license-file license.key --device-id <device-id> --api-url http://localhost:8080
+./licensemanager verify --dual --license-file license.key --device-id F6235A40-C9E2-5681-B236-ED9C4C15E58D --api-url http://localhost:8080
 ```
 
 **注意**：验证时会自动清理许可证文件中的换行符和空格，确保 Base64 编码正确解析。
 
-### 4. 设备管理
+### 4. 获取设备UUID
+
+```bash
+# 获取当前设备的UUID（用于生成许可证）
+./licensemanager uuid
+# 或
+./licensemanager checkuuid
+
+# 输出示例: F6235A40-C9E2-5681-B236-ED9C4C15E58D
+```
+
+**设备UUID说明**：
+- **Linux**: 使用 `/etc/machine-id` 或 `/var/lib/dbus/machine-id`
+- **macOS**: 使用 `ioreg` 获取 `IOPlatformUUID` 或 `system_profiler` 获取 Hardware UUID
+- **Windows**: 使用 `wmic csproduct get UUID` 或 PowerShell 获取 ComputerSystem UUID
+- 如果系统UUID不可用，将基于硬件信息（MAC地址、CPU、磁盘等）生成UUID格式标识符
+
+### 5. 设备管理
 
 ```bash
 # 列出所有设备
 ./licensemanager device list
 
-# 查看设备详情
-./licensemanager device show <device-id>
+# 查看当前设备UUID
+./licensemanager device show
+
+# 查看指定设备详情
+./licensemanager device show <device-uuid>
 
 # 绑定设备
-./licensemanager device bind <device-id>
+./licensemanager device bind <device-uuid>
 ```
 
 ### 后台管理
@@ -205,16 +240,16 @@ go build -o license-server ./cmd/server
 
 - **密码保护**：所有管理功能都需要密码验证
 - **统计概览**：查看总设备数、活跃设备、许可证数量等统计信息
-- **设备管理**：查看所有注册设备，包括设备ID、名称、状态、注册时间等
+- **设备管理**：查看所有注册设备，包括设备UUID、名称、状态、注册时间等
 - **许可证管理**：
-  - 查看所有许可证列表（ID、设备ID、类型、到期时间、创建时间）
+  - 查看所有许可证列表（ID、设备UUID、类型、到期时间、创建时间）
   - 在线生成新许可证（支持离线/在线/双重验证三种类型）
   - 生成后可直接下载 `license.key` 文件
   - 许可证列表中每个许可证都支持快捷下载
   - 删除许可证
 - **Token 管理**：查看和管理 API Token，支持撤销操作
 
-### 6. API Token 管理
+### 7. API Token 管理
 
 ```bash
 # 创建客户端 Token
@@ -227,7 +262,7 @@ go build -o license-server ./cmd/server
 ./licensemanager admin token create --type client --app-id your_app_id --expires 2024-12-31
 ```
 
-### 7. 输出格式
+### 8. 输出格式
 
 ```bash
 # 文本输出（默认）
@@ -266,10 +301,10 @@ import (
 )
 
 func main() {
-    // 获取设备ID（硬件指纹）
-    deviceID, err := device.GetDeviceID()
+    // 获取设备UUID（标准UUID格式，如：F6235A40-C9E2-5681-B236-ED9C4C15E58D）
+    deviceUUID, err := device.GetDeviceID()
     if err != nil {
-        log.Fatalf("Failed to get device ID: %v", err)
+        log.Fatalf("Failed to get device UUID: %v", err)
     }
     
     // 创建离线验证器（不需要API地址）
@@ -282,7 +317,7 @@ func main() {
     }
     
     // 验证许可证（完全本地验证，无需网络）
-    result, err := verifier.Verify(licenseKey, deviceID)
+    result, err := verifier.Verify(licenseKey, deviceUUID)
     if err != nil {
         log.Fatalf("License verification failed: %v", err)
     }
@@ -326,7 +361,7 @@ func main() {
     })
     
     // 验证许可证（通过网络验证）
-    result, err := verifier.Verify(deviceID)
+    result, err := verifier.Verify(deviceUUID)
     if err != nil {
         log.Fatalf("License verification failed: %v", err)
     }
@@ -376,7 +411,7 @@ func main() {
     })
     
     // 验证许可证（需要同时通过离线验证和网络验证）
-    result, err := verifier.Verify(licenseKey, deviceID)
+    result, err := verifier.Verify(licenseKey, deviceUUID)
     if err != nil {
         log.Fatalf("License verification failed: %v", err)
     }
@@ -414,14 +449,14 @@ import (
 )
 
 type App struct {
-    verifier license.Verifier
-    deviceID string
+    verifier  license.Verifier
+    deviceUUID string
 }
 
 func NewApp(licenseType string, apiURL string) (*App, error) {
-    deviceID, err := device.GetDeviceID()
+    deviceUUID, err := device.GetDeviceID()
     if err != nil {
-        return nil, fmt.Errorf("failed to get device ID: %w", err)
+        return nil, fmt.Errorf("failed to get device UUID: %w", err)
     }
     
     var verifier license.Verifier
@@ -452,8 +487,8 @@ func NewApp(licenseType string, apiURL string) (*App, error) {
     }
     
     return &App{
-        verifier: verifier,
-        deviceID: deviceID,
+        verifier:   verifier,
+        deviceUUID: deviceUUID,
     }, nil
 }
 
@@ -468,17 +503,17 @@ func (app *App) CheckLicense() error {
         if err != nil {
             return fmt.Errorf("failed to load license: %w", err)
         }
-        result, err = v.Verify(licenseKey, app.deviceID)
+        result, err = v.Verify(licenseKey, app.deviceUUID)
         
     case *license.OnlineVerifier:
-        result, err = v.Verify(app.deviceID)
+        result, err = v.Verify(app.deviceUUID)
         
     case *license.DualVerifier:
         licenseKey, err := license.LoadLicenseFromFile("license.key")
         if err != nil {
             return fmt.Errorf("failed to load license: %w", err)
         }
-        result, err = v.Verify(licenseKey, app.deviceID)
+        result, err = v.Verify(licenseKey, app.deviceUUID)
     }
     
     if err != nil {
@@ -574,7 +609,7 @@ if err != nil {
     case license.ErrExpiredLicense:
         fmt.Println("许可证已过期")
     case license.ErrDeviceMismatch:
-        fmt.Println("设备ID不匹配")
+        fmt.Println("设备UUID不匹配")
     case license.ErrNetworkError:
         fmt.Println("网络验证失败（仅网络验证和双重验证）")
     default:
@@ -795,6 +830,12 @@ garble build -o app main.go
 #### 详细安全分析
 更多安全分析请参考 [docs/SECURITY.md](docs/SECURITY.md)
 
+#### 设备UUID方案
+详细的设备UUID生成方案和使用说明，请参考 [docs/DEVICE_UUID.md](docs/DEVICE_UUID.md)
+
+#### 设备UUID方案
+详细的设备UUID生成方案和使用说明，请参考 [docs/DEVICE_UUID.md](docs/DEVICE_UUID.md)
+
 ### 后台管理安全
 - **密码保护**：启动管理服务器时必须设置强密码（`--passwd` 参数）
 - **会话管理**：登录后使用 Cookie 保持会话，默认 24 小时有效
@@ -833,23 +874,37 @@ A: 生产环境部署建议：
 
 A: 目前使用 SQLite 数据库，使用纯 Go 实现（modernc.org/sqlite），无需 CGO，可以在任何平台运行。
 
-### Q: 如何获取设备ID？
+### Q: 如何获取设备UUID？
 
-A: 设备ID基于硬件指纹自动生成，可以通过以下方式获取：
+A: 设备UUID基于系统UUID或硬件信息生成，标准UUID格式。可以通过以下方式获取：
 ```bash
-# 使用命令行工具
+# 使用命令行工具（推荐）
+./licensemanager uuid
+# 或
+./licensemanager checkuuid
+
+# 查看设备信息（包含UUID）
 ./licensemanager device show
 
 # 或在 Go 程序中
 import "github.com/Zeroshcat/LicenseManager/pkg/device"
-deviceID, err := device.GetDeviceID()
+deviceUUID, err := device.GetDeviceID()
+// 返回格式: F6235A40-C9E2-5681-B236-ED9C4C15E58D
 ```
+
+**UUID生成策略**：
+1. **优先使用系统UUID**（最稳定）：
+   - Linux: `/etc/machine-id`
+   - macOS: `IOPlatformUUID`
+   - Windows: `ComputerSystem UUID`
+2. **后备方案**：如果系统UUID不可用，基于硬件信息（MAC地址、CPU、磁盘、主板等）生成UUID格式标识符
 
 ### Q: 许可证可以转移吗？
 
-A: 许可证与设备ID绑定，不能直接转移。如果需要在新设备上使用，需要：
+A: 许可证与设备UUID绑定，不能直接转移。如果需要在新设备上使用，需要：
 1. 删除旧设备的许可证
-2. 为新设备生成新的许可证
+2. 获取新设备的UUID：`./licensemanager uuid`
+3. 为新设备生成新的许可证：`./licensemanager generate --device-id <new-uuid> ...`
 
 ### Q: 如何测试许可证功能？
 

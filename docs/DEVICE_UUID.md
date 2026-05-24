@@ -1,128 +1,152 @@
-# 设备UUID方案说明
+# Device UUID Design
 
-## 概述
+English | [Simplified Chinese](DEVICE_UUID_CN.md)
 
-LicenseManager 使用标准UUID格式作为设备唯一标识符，参考了 [xinjiayu/LicenseManager](https://github.com/xinjiayu/LicenseManager) 项目的实现方案。
+## Overview
 
-## UUID格式
+LicenseManager uses a standard UUID string as the device identifier stored in licenses and device records. The UUID is derived from stable hardware serial data, not from an operating-system installation identifier.
 
-设备UUID采用标准UUID格式：`XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX`
+For enterprise licensing, device identity should follow the physical machine. A license should remain valid after reinstalling the operating system on the same hardware, but should not remain valid after replacing the mainboard or machine. The current implementation therefore uses a fail-closed policy: if a trusted hardware serial cannot be read, device UUID generation fails.
 
-示例：`F6235A40-C9E2-5681-B236-ED9C4C15E58D`
+## UUID Format
 
-## 生成策略
+Device UUIDs use the standard UUID text format:
 
-### 优先级1：系统UUID（推荐）
+```text
+XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+```
 
-优先使用操作系统提供的机器UUID，这是最稳定的方案：
+Example:
 
-#### Linux
-- **主要来源**：`/etc/machine-id`
-- **备用来源**：`/var/lib/dbus/machine-id`
-- **特点**：系统级唯一标识，不会因硬件更换而变化
-
-#### macOS
-- **主要来源**：`ioreg` 命令获取 `IOPlatformUUID`
-- **备用来源**：`system_profiler SPHardwareDataType` 获取 Hardware UUID
-- **特点**：硬件级别的唯一标识，与硬件绑定
-
-#### Windows
-- **主要来源**：`wmic csproduct get UUID` 获取 ComputerSystem UUID
-- **备用来源**：PowerShell `Get-WmiObject Win32_ComputerSystemProduct`
-- **特点**：主板级别的唯一标识，相对稳定
-
-### 优先级2：硬件信息生成UUID（后备方案）
-
-如果系统UUID不可用，将基于以下硬件信息生成UUID格式标识符：
-
-1. **MAC地址**：优先使用第一个非虚拟网络接口的MAC地址
-2. **主机名**：系统主机名
-3. **CPU信息**：
-   - Linux: `/proc/cpuinfo`
-   - macOS: `sysctl machdep.cpu.brand_string`
-   - Windows: `wmic cpu get ProcessorId`
-4. **磁盘序列号**：
-   - Linux: `lsblk`
-   - macOS: `diskutil info`
-   - Windows: `wmic diskdrive get SerialNumber`
-5. **主板序列号**：
-   - Linux: `dmidecode`
-   - macOS: `system_profiler`
-   - Windows: `wmic baseboard get SerialNumber`
-6. **操作系统信息**：`GOOS` 和 `GOARCH`
-
-这些信息通过MD5哈希后转换为标准UUID格式。
-
-## 使用方法
-
-### 命令行获取UUID
-
-```bash
-# 获取当前设备的UUID
-./licensemanager uuid
-# 或
-./licensemanager checkuuid
-
-# 输出示例
+```text
 F6235A40-C9E2-5681-B236-ED9C4C15E58D
 ```
 
-### Go程序中使用
+The raw hardware serial is not stored directly in the license. LicenseManager canonicalizes the hardware value and hashes it into a deterministic UUID.
+
+## Supported Hardware Sources
+
+Device UUID generation only accepts mainboard or machine hardware serial numbers.
+
+| Platform | Source |
+| --- | --- |
+| Linux | DMI mainboard serial from `/sys/class/dmi/id/board_serial`; if needed, `dmidecode -s baseboard-serial-number`. |
+| macOS | Machine serial from `system_profiler SPHardwareDataType`. |
+| Windows | Baseboard serial from `Win32_BaseBoard.SerialNumber` through PowerShell/CIM; if needed, `wmic baseboard get SerialNumber`. |
+
+Multiple read methods may be tried on a platform, but they are still reading the same class of hardware identity. The implementation does not switch to mutable fallback identity sources.
+
+## Rejected Identity Sources
+
+The following values are intentionally not used as device identity sources:
+
+- `/etc/machine-id`
+- `/var/lib/dbus/machine-id`
+- hostname
+- MAC address
+- operating system name or CPU architecture
+- OS install time, boot ID, user profile data, or similar installation-state values
+- placeholder hardware values such as `To Be Filled By O.E.M.`, `Not Specified`, `Default string`, all-zero serials, or all-`F` serials
+
+These values are unsuitable for enterprise device binding because they can change during normal operations such as OS reinstall, network adapter replacement, virtualization configuration changes, or hostname updates.
+
+## Generation Flow
+
+1. Read the platform-specific hardware serial.
+2. Normalize whitespace, casing, and null/BOM characters.
+3. Reject known placeholder or invalid serial values.
+4. Hash the normalized serial with an internal source label.
+5. Format the first 16 bytes as a deterministic UUID string.
+
+This gives the license system a stable public device ID without exposing the original hardware serial.
+
+## CLI Usage
+
+Run this command on the target machine:
+
+```bash
+./licensemanager uuid
+# or
+./licensemanager checkuuid
+```
+
+Example output:
+
+```text
+F6235A40-C9E2-5681-B236-ED9C4C15E58D
+```
+
+If the command fails, the target machine did not expose a trusted hardware serial through the supported APIs, or the serial value was rejected as a placeholder.
+
+## Go Usage
 
 ```go
 import "github.com/Zeroshcat/LicenseManager/pkg/device"
 
-// 获取设备UUID
 deviceUUID, err := device.GetDeviceID()
 if err != nil {
-    log.Fatalf("Failed to get device UUID: %v", err)
+    log.Fatalf("failed to get device UUID: %v", err)
 }
 
-// deviceUUID 格式: F6235A40-C9E2-5681-B236-ED9C4C15E58D
 fmt.Printf("Device UUID: %s\n", deviceUUID)
 ```
 
-## 优势
+## Behavior Guarantees
 
-1. **稳定性**：系统UUID不会因用户修改主机名、更换网络接口等操作而变化
-2. **唯一性**：UUID格式确保全局唯一性
-3. **兼容性**：与参考项目格式一致，便于迁移和集成
-4. **可读性**：标准UUID格式易于识别和使用
-5. **跨平台**：支持 Linux、macOS、Windows 三大主流平台
+1. **OS reinstall**: the device UUID should remain stable if the mainboard or machine hardware serial remains stable and readable.
+2. **Mainboard or machine replacement**: the device UUID should change, so the old license should no longer validate.
+3. **Unreadable hardware serial**: device UUID generation fails instead of silently binding to a weaker identifier.
+4. **Placeholder serials**: known vendor placeholders are rejected to avoid issuing licenses to non-unique identities.
 
-## 注意事项
+## Migration Notes
 
-1. **系统UUID优先**：系统UUID是最稳定的方案，建议确保系统UUID可用
-2. **虚拟环境**：在虚拟机中，系统UUID通常是稳定的，但MAC地址可能变化
-3. **容器环境**：容器中的系统UUID可能来自宿主机，需要注意隔离性
-4. **硬件更换**：如果更换了主板（Windows）或主要硬件（macOS），系统UUID可能会变化
+Older builds that used system UUIDs or machine IDs may produce a different device ID from the current hardware-serial policy. Licenses issued against those old IDs may need to be reissued or migrated through an explicit operational process.
 
-## 故障排查
+Recommended migration approach:
 
-### 问题：无法获取系统UUID
+1. Ask the customer or deployment agent to run the new `licensemanager uuid` command.
+2. Confirm that the new UUID comes from a valid hardware serial source.
+3. Reissue the license for the new UUID.
+4. Revoke or archive the old system-ID-based license record.
 
-**解决方案**：
-1. 检查系统权限（某些系统UUID文件需要root权限）
-2. 确认系统UUID文件存在：
-   - Linux: `cat /etc/machine-id`
-   - macOS: `ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID`
-   - Windows: `wmic csproduct get UUID`
+## Troubleshooting
 
-### 问题：UUID格式不正确
+### Device UUID Cannot Be Read
 
-**解决方案**：
-- 代码会自动将非标准格式转换为标准UUID格式
-- 如果仍有问题，检查系统UUID文件内容
+Check whether the hardware serial is available on the machine.
 
-### 问题：UUID在不同平台不一致
+Linux:
 
-**说明**：
-- 这是正常现象，不同平台使用不同的UUID来源
-- 同一设备在不同平台上的UUID可能不同
-- 建议在同一平台上生成和验证许可证
+```bash
+cat /sys/class/dmi/id/board_serial
+sudo dmidecode -s baseboard-serial-number
+```
 
-## 参考
+macOS:
 
-- [xinjiayu/LicenseManager](https://github.com/xinjiayu/LicenseManager) - 参考项目
-- [RFC 4122](https://tools.ietf.org/html/rfc4122) - UUID标准规范
+```bash
+system_profiler SPHardwareDataType
+```
 
+Windows PowerShell:
+
+```powershell
+Get-CimInstance Win32_BaseBoard | Select-Object SerialNumber
+```
+
+If these commands return placeholder values such as `To Be Filled By O.E.M.` or `Not Specified`, fix the firmware/vendor asset data or use an explicit enterprise asset registration process. LicenseManager will not silently fall back to a mutable local identifier.
+
+### UUID Differs Across Operating Systems On The Same Hardware
+
+Linux and Windows usually expose a mainboard serial, but vendor behavior varies. macOS uses the machine serial exposed by Apple tooling. In dual-boot or virtualization environments, capture the UUID from the exact runtime environment where the licensed software will run.
+
+### Linux Requires Elevated Permissions
+
+Some Linux distributions restrict access to DMI data. Prefer reading `/sys/class/dmi/id/board_serial` when available. If the deployment requires `dmidecode`, document the permission requirement for the runtime or activation workflow.
+
+## Operational Guidance
+
+- Capture and store the generated device UUID during device registration.
+- Store audit metadata separately if you need to know which hardware source was used; do not place raw serials in customer-facing license payloads unless the business explicitly requires it.
+- Treat failure to read a hardware serial as an activation issue that needs operational handling, not as a reason to bind to a weaker identifier.
+- For machines without reliable hardware serials, design an explicit server-side registration or enterprise asset-number workflow rather than adding automatic local fallback logic.
